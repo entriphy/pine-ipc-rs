@@ -1,0 +1,10 @@
+[package]
+name = "pine_ipc"
+version = "1.0.0"
+authors = ["triph"]
+edition = "2021"
+description = "A PINE client implementation"
+readme = "README.md"
+repository = "https://github.com/entriphy/pine-rs"
+license = "MIT"
+keywords = ["pine", "ipc", "emulator"]
