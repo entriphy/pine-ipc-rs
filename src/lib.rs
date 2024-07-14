@@ -1,148 +1,5 @@
 use std::{env, io::{Cursor, Read, Write}, net::{Ipv4Addr, SocketAddrV4, TcpStream}, os::unix::net::UnixStream, path::Path, sync::Mutex};
 
-#[repr(u8)]
-#[derive(Debug)]
-pub enum PINEResult<T> {
-    Ok(Vec<T>) = 0,
-    Fail = 255
-}
-
-#[repr(u8)]
-#[derive(Debug)]
-pub enum PINECommand {
-    MsgRead8 { mem: u32 } = 0,
-    MsgRead16 { mem: u32 } = 1,
-    MsgRead32 { mem: u32 } = 2,
-    MsgRead64 { mem: u32 } = 3,
-    MsgWrite8 { mem: u32, val: u8 } = 4,
-    MsgWrite16 { mem: u32, val: u16 } = 5,
-    MsgWrite32 { mem: u32, val: u32 } = 6,
-    MsgWrite64 { mem: u32, val: u64 } = 7,
-    MsgVersion = 8,
-    MsgSaveState { sta: u8 } = 9,
-    MsgLoadState { sta: u8 } = 10,
-    MsgTitle = 11,
-    MsgID = 12,
-    MsgUUID = 13,
-    MsgGameVersion = 14,
-    MsgStatus = 15,
-    MsgUnimplemented = 255
-}
-
-impl PINECommand {
-    fn to_opcode(&self) -> u8 {
-        match self {
-            PINECommand::MsgRead8 { .. } => 0,
-            PINECommand::MsgRead16 { .. } => 1,
-            PINECommand::MsgRead32 { .. } => 2,
-            PINECommand::MsgRead64 { .. } => 3,
-            PINECommand::MsgWrite8 { .. } => 4,
-            PINECommand::MsgWrite16 { .. } => 5,
-            PINECommand::MsgWrite32 { .. } => 6,
-            PINECommand::MsgWrite64 { .. } => 7,
-            PINECommand::MsgVersion => 8,
-            PINECommand::MsgSaveState { .. } => 9,
-            PINECommand::MsgLoadState { .. } => 10,
-            PINECommand::MsgTitle => 11,
-            PINECommand::MsgID => 12,
-            PINECommand::MsgUUID => 13,
-            PINECommand::MsgGameVersion => 14,
-            PINECommand::MsgStatus => 15,
-            PINECommand::MsgUnimplemented => 255,
-        }
-    }
-}
-
-impl std::fmt::Display for PINECommand {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-#[repr(u8)]
-#[derive(Debug)]
-pub enum PINEResponse {
-    ResRead8 { val: u8 },
-    ResRead16 { val: u16 },
-    ResRead32 { val: u32 },
-    ResRead64 { val: u64 },
-    ResWrite8,
-    ResWrite16,
-    ResWrite32,
-    ResWrite64,
-    ResVersion { version: String },
-    ResSaveState,
-    ResLoadState,
-    ResTitle { title: String },
-    ResID { id: String },
-    ResUUID { uuid: String },
-    ResGameVersion { version: String },
-    ResStatus { status: PINEStatus },
-    ResUnimplemented
-}
-
-impl std::fmt::Display for PINEResponse {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-#[repr(u32)]
-#[derive(Debug)]
-pub enum PINEStatus {
-    Running = 0,
-    Paused = 1,
-    Shutdown = 2,
-    Unknown
-}
-
-impl PINEStatus {
-    fn from(i: u32) -> PINEStatus {
-        match i {
-            0 => PINEStatus::Running,
-            1 => PINEStatus::Paused,
-            2 => PINEStatus::Shutdown,
-            _ => PINEStatus::Unknown
-        }
-    }
-}
-
-impl std::fmt::Display for PINEStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-enum PINESocket {
-    Unix(UnixStream),
-    Windows(TcpStream)
-}
-
-impl Read for PINESocket {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self {
-            PINESocket::Unix(s) => s.read(buf),
-            PINESocket::Windows(s) => s.read(buf),
-        }
-    }
-}
-
-impl Write for PINESocket {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match self {
-            PINESocket::Unix(s) => s.write(buf),
-            PINESocket::Windows(s) => s.write(buf),
-        }
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        match self {
-            PINESocket::Unix(s) => s.flush(),
-            PINESocket::Windows(s) => s.flush(),
-        }
-    }
-}
-
 pub struct PINE {
     socket: PINESocket,
     mutex: Mutex<()>
@@ -162,25 +19,23 @@ impl PINE {
                     return Err(format!("Could not find Unix socket at {path:?}. Ensure PINE is enabled in the target emulator."));
                 }
 
-                let stream = match UnixStream::connect(path) {
-                    Ok(x) => x,
+                match UnixStream::connect(path) {
                     Err(err) => return Err(format!("Could not connect to Unix socket: {err}")),
-                };
-                return Ok(PINE { socket: PINESocket::Unix(stream), mutex: Mutex::new(()) });
+                    Ok(stream) => Ok(PINE { socket: PINESocket::Unix(stream), mutex: Mutex::new(()) }),
+                }
             },
 
             "windows" => {
                 let addr = Ipv4Addr::new(127, 0, 0, 1);
                 let socket = SocketAddrV4::new(addr, slot);
-                let stream = match TcpStream::connect(socket) {
-                    Ok(x) => x,
+                match TcpStream::connect(socket) {
                     Err(err) => return Err(format!("Could not connect to TCP socket: {err}")),
-                };
-                return Ok(PINE { socket: PINESocket::Windows(stream), mutex: Mutex::new(()) });
+                    Ok(stream) => Ok(PINE { socket: PINESocket::Windows(stream), mutex: Mutex::new(()) })
+                }
             },
 
-            _ => panic!("Unsupported operating system")
-        };
+            _ => Err(format!("Unsupported operating system"))
+        }
     }
 
     pub fn connect_pcsx2(slot: Option<u16>) -> Result<PINE, String> {
@@ -253,8 +108,8 @@ impl PINE {
 
     pub fn shutdown(self) -> Result<(), std::io::Error> {
         match self.socket {
-            PINESocket::Unix(x) => x.shutdown(std::net::Shutdown::Both),
-            PINESocket::Windows(x) => x.shutdown(std::net::Shutdown::Both),
+            PINESocket::Unix(stream) => stream.shutdown(std::net::Shutdown::Both),
+            PINESocket::Windows(stream) => stream.shutdown(std::net::Shutdown::Both),
         }
     }
 }
@@ -326,6 +181,155 @@ impl FromIterator<PINECommand> for PINEBatch {
 impl Default for PINEBatch {
     fn default() -> Self {
         PINEBatch::new()
+    }
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug)]
+pub enum PINECommand {
+    MsgRead8 { mem: u32 } = 0,
+    MsgRead16 { mem: u32 } = 1,
+    MsgRead32 { mem: u32 } = 2,
+    MsgRead64 { mem: u32 } = 3,
+    MsgWrite8 { mem: u32, val: u8 } = 4,
+    MsgWrite16 { mem: u32, val: u16 } = 5,
+    MsgWrite32 { mem: u32, val: u32 } = 6,
+    MsgWrite64 { mem: u32, val: u64 } = 7,
+    MsgVersion = 8,
+    MsgSaveState { sta: u8 } = 9,
+    MsgLoadState { sta: u8 } = 10,
+    MsgTitle = 11,
+    MsgID = 12,
+    MsgUUID = 13,
+    MsgGameVersion = 14,
+    MsgStatus = 15,
+    MsgUnimplemented = 255
+}
+
+impl PINECommand {
+    fn to_opcode(&self) -> u8 {
+        match self {
+            PINECommand::MsgRead8 { .. } => 0,
+            PINECommand::MsgRead16 { .. } => 1,
+            PINECommand::MsgRead32 { .. } => 2,
+            PINECommand::MsgRead64 { .. } => 3,
+            PINECommand::MsgWrite8 { .. } => 4,
+            PINECommand::MsgWrite16 { .. } => 5,
+            PINECommand::MsgWrite32 { .. } => 6,
+            PINECommand::MsgWrite64 { .. } => 7,
+            PINECommand::MsgVersion => 8,
+            PINECommand::MsgSaveState { .. } => 9,
+            PINECommand::MsgLoadState { .. } => 10,
+            PINECommand::MsgTitle => 11,
+            PINECommand::MsgID => 12,
+            PINECommand::MsgUUID => 13,
+            PINECommand::MsgGameVersion => 14,
+            PINECommand::MsgStatus => 15,
+            PINECommand::MsgUnimplemented => 255,
+        }
+    }
+}
+
+impl Into<u8> for PINECommand {
+    fn into(self) -> u8 {
+        self.to_opcode()
+    }
+}
+
+impl std::fmt::Display for PINECommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[repr(u8)]
+#[derive(Clone, Debug)]
+pub enum PINEResult<T> {
+    Ok(Vec<T>) = 0,
+    Fail = 0xFF
+}
+
+#[repr(u8)]
+#[derive(Clone, Debug)]
+pub enum PINEResponse {
+    ResRead8 { val: u8 },
+    ResRead16 { val: u16 },
+    ResRead32 { val: u32 },
+    ResRead64 { val: u64 },
+    ResWrite8,
+    ResWrite16,
+    ResWrite32,
+    ResWrite64,
+    ResVersion { version: String },
+    ResSaveState,
+    ResLoadState,
+    ResTitle { title: String },
+    ResID { id: String },
+    ResUUID { uuid: String },
+    ResGameVersion { version: String },
+    ResStatus { status: PINEStatus },
+    ResUnimplemented
+}
+
+impl std::fmt::Display for PINEResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[repr(u32)]
+#[derive(Clone, Debug)]
+pub enum PINEStatus {
+    Running = 0,
+    Paused = 1,
+    Shutdown = 2,
+    Unknown
+}
+
+impl From<u32> for PINEStatus {
+    fn from(value: u32) -> Self {
+        match value {
+            0 => PINEStatus::Running,
+            1 => PINEStatus::Paused,
+            2 => PINEStatus::Shutdown,
+            _ => PINEStatus::Unknown
+        }
+    }
+}
+
+impl std::fmt::Display for PINEStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+enum PINESocket {
+    Unix(UnixStream),
+    Windows(TcpStream)
+}
+
+impl Read for PINESocket {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            PINESocket::Unix(s) => s.read(buf),
+            PINESocket::Windows(s) => s.read(buf),
+        }
+    }
+}
+
+impl Write for PINESocket {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            PINESocket::Unix(s) => s.write(buf),
+            PINESocket::Windows(s) => s.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            PINESocket::Unix(s) => s.flush(),
+            PINESocket::Windows(s) => s.flush(),
+        }
     }
 }
 
