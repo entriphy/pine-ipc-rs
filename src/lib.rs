@@ -334,7 +334,7 @@ fn read_u8 <R: Read>(reader: &mut R) -> Result<u8, std::io::Error>  { read_impl!
 fn read_string<R: Read>(reader: &mut R) -> Result<String, std::io::Error> {
     let size = read_u32(reader)?;
     let mut buffer: Vec<u8> = vec![0; size as usize];
-    let _ = reader.read_exact(buffer.as_mut_slice());
+    reader.read_exact(buffer.as_mut_slice())?;
     let mut s = std::str::from_utf8(&buffer).unwrap().to_string();
     s.pop(); // Remove null terminator
     return Ok(s);
