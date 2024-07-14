@@ -313,6 +313,16 @@ impl PINEBatch {
     }
 }
 
+impl FromIterator<PINECommand> for PINEBatch {
+    fn from_iter<T: IntoIterator<Item = PINECommand>>(iter: T) -> Self {
+        let mut batch = PINEBatch::new();
+        for cmd in iter {
+            batch.add(cmd);
+        }
+        return batch;
+    }
+}
+
 impl Default for PINEBatch {
     fn default() -> Self {
         PINEBatch::new()
