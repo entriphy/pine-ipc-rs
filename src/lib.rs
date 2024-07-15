@@ -1,12 +1,16 @@
-use std::{env, io::{Cursor, Read, Write}, net::{Ipv4Addr, SocketAddrV4, TcpStream}, os::unix::net::UnixStream, path::Path, sync::Mutex};
+use std::{env, io::{Cursor, Read, Write}, path::Path, sync::Mutex};
+#[cfg(target_family = "unix")] use std::os::unix::net::UnixStream;
+#[cfg(target_family = "windows")] use std::net::{Ipv4Addr, SocketAddrV4, TcpStream};
 
 pub struct PINE {
-    socket: PINESocket,
+    #[cfg(target_family = "unix")] stream: UnixStream,
+    #[cfg(target_family = "windows")] stream: TcpStream,
     mutex: Mutex<()>
 }
 
 impl PINE {
     pub fn connect(target: &str, slot: u16, auto: bool) -> Result<PINE, String> {
+        #[cfg(target_family = "unix")]
         match env::consts::OS {
             "linux" | "macos" => {
                 let dir = match env::var(if env::consts::OS == "linux" { "XDG_RUNTIME_DIR" } else { "TMPDIR" }) {
@@ -19,22 +23,18 @@ impl PINE {
                     return Err(format!("Could not find Unix socket at {path:?}. Ensure PINE is enabled in the target emulator."));
                 }
 
-                match UnixStream::connect(path) {
+                match std::os::unix::net::UnixStream::connect(path) {
                     Err(err) => return Err(format!("Could not connect to Unix socket: {err}")),
-                    Ok(stream) => Ok(PINE { socket: PINESocket::Unix(stream), mutex: Mutex::new(()) }),
+                    Ok(stream) => Ok(PINE { stream: stream, mutex: Mutex::new(()) }),
                 }
             },
-
-            "windows" => {
-                let addr = Ipv4Addr::new(127, 0, 0, 1);
-                let socket = SocketAddrV4::new(addr, slot);
-                match TcpStream::connect(socket) {
-                    Err(err) => return Err(format!("Could not connect to TCP socket: {err}")),
-                    Ok(stream) => Ok(PINE { socket: PINESocket::Windows(stream), mutex: Mutex::new(()) })
-                }
-            },
-
             _ => Err(format!("Unsupported operating system"))
+        }
+
+        #[cfg(target_family = "windows")]
+        match TcpStream::connect(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), slot)) {
+            Err(err) => return Err(format!("Could not connect to TCP socket: {err}")),
+            Ok(stream) => Ok(PINE { stream: stream, mutex: Mutex::new(()) })
         }
     }
 
@@ -55,18 +55,18 @@ impl PINE {
         let _unused = self.mutex.lock().unwrap();
 
         // Write buffer to socket
-        self.socket.write_all(buffer)?;
+        self.stream.write_all(buffer)?;
 
         // Read response header
-        let res_size = read_u32(&mut self.socket)?;
-        let res_result = read_u8(&mut self.socket)?;
+        let res_size = read_u32(&mut self.stream)?;
+        let res_result = read_u8(&mut self.stream)?;
         if res_result != 0 {
             return Ok(PINEResult::Fail);
         }
 
         // Read buffer
         let mut res_buffer = vec![0; res_size as usize - 5];
-        self.socket.read_exact(res_buffer.as_mut_slice())?;
+        self.stream.read_exact(res_buffer.as_mut_slice())?;
         return Ok(PINEResult::Ok(res_buffer));
     }
 
@@ -107,10 +107,7 @@ impl PINE {
     }
 
     pub fn shutdown(self) -> Result<(), std::io::Error> {
-        match self.socket {
-            PINESocket::Unix(stream) => stream.shutdown(std::net::Shutdown::Both),
-            PINESocket::Windows(stream) => stream.shutdown(std::net::Shutdown::Both),
-        }
+        self.stream.shutdown(std::net::Shutdown::Both)
     }
 }
 
@@ -300,36 +297,6 @@ impl From<u32> for PINEStatus {
 impl std::fmt::Display for PINEStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{:?}", self)
-    }
-}
-
-enum PINESocket {
-    Unix(UnixStream),
-    Windows(TcpStream)
-}
-
-impl Read for PINESocket {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self {
-            PINESocket::Unix(s) => s.read(buf),
-            PINESocket::Windows(s) => s.read(buf),
-        }
-    }
-}
-
-impl Write for PINESocket {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match self {
-            PINESocket::Unix(s) => s.write(buf),
-            PINESocket::Windows(s) => s.write(buf),
-        }
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        match self {
-            PINESocket::Unix(s) => s.flush(),
-            PINESocket::Windows(s) => s.flush(),
-        }
     }
 }
 
