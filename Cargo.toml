@@ -6,8 +6,11 @@ edition = "2021"
 description = "A PINE client implementation"
 readme = "README.md"
 repository = "https://github.com/entriphy/pine-rs"
+homepage = "https://github.com/entriphy/pine-rs"
 license = "MIT"
 keywords = ["pine", "ipc", "emulator"]
+categories = ["network-programming"]
+exclude = ["src/main.rs"]
 
 [dependencies]
 thiserror = "2.0.12"
