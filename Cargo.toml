@@ -8,3 +8,6 @@ readme = "README.md"
 repository = "https://github.com/entriphy/pine-rs"
 license = "MIT"
 keywords = ["pine", "ipc", "emulator"]
+
+[dependencies]
+thiserror = "2.0.12"

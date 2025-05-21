@@ -1,5 +1,5 @@
 # pine-rs
-Dependencyless Rust implementation of the [PINE IPC protocol](https://github.com/GovanifY/pine).
+Rust implementation of the [PINE IPC protocol](https://github.com/GovanifY/pine).
 
 ## Usage
 ```rust
