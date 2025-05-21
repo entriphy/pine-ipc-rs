@@ -1,5 +1,5 @@
 [package]
-name = "pine_ipc"
+name = "pine-ipc"
 version = "1.0.0"
 authors = ["triph"]
 edition = "2021"
