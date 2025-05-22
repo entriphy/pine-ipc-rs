@@ -1,3 +1,5 @@
+#[cfg(target_family = "unix")]
+use std::os::unix::net::UnixStream;
 use std::{
     env,
     io::{Cursor, Read, Write},
@@ -6,7 +8,6 @@ use std::{
     str::Utf8Error,
     sync::Mutex,
 };
-#[cfg(target_family = "unix")] use std::os::unix::net::UnixStream;
 use thiserror::Error;
 
 #[derive(Error, Debug)]

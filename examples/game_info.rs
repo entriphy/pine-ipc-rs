@@ -1,8 +1,3 @@
-# pine-ipc
-Rust implementation of the [PINE IPC protocol](https://github.com/GovanifY/pine).
-
-## Usage
-```rust
 use pine_ipc::{PINEBatch, PINECommand, PINE};
 
 fn main() {
@@ -25,4 +20,3 @@ fn main() {
     //     ResRead32 { val: 3566512 }
     // ]
 }
-```
